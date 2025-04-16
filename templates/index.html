@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sanskrit to Indian Languages Translator</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+
+        textarea {
+            width: 100%;
+            max-width: 600px;
+            height: 150px;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            font-size: 16px;
+            margin-bottom: 10px;
+            resize: none;
+        }
+
+        button {
+            background-color: #28a745;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+
+        button:hover {
+            background-color: #218838;
+        }
+
+        .translation-result {
+            background-color: white;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            padding: 15px;
+            min-height: 100px;
+            max-width: 600px;
+            width: 100%;
+            word-wrap: break-word;
+            color: #333;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 20px auto;
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            width: 100%;
+        }
+
+        .loading {
+            display: none;
+            color: #666;
+            font-style: italic;
+            margin: 10px 0;
+        }
+
+        .language-select {
+            width: 100%;
+            max-width: 600px;
+            padding: 8px;
+            font-size: 16px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+            margin-bottom: 15px;
+        }
+
+        .button-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .audio-controls {
+            margin-top: 15px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        #recordButton {
+            background-color: #dc3545;
+        }
+
+        #recordButton.recording {
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        @media (max-width: 600px) {
+            .container {
+                padding: 20px;
+            }
+            
+            .button-group {
+                flex-direction: column;
+            }
+            
+            button {
+                width: 100%;
+                margin-right: 0;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>Sanskrit to Hindi Translator</h1>
+        <select id="languageSelect" class="language-select">
+            <option value="hi">Hindi (hi_IN)</option>
+            <option value="bn">Bengali (bn_IN)</option>
+            <option value="gu">Gujarati (gu_IN)</option>
+            <option value="mr">Marathi (mr_IN)</option>
+            <option value="ta">Tamil (ta_IN)</option>
+            <option value="te">Telugu (te_IN)</option>
+            <option value="ml">Malayalam (ml_IN)</option>
+            <option value="pa">Punjabi (pa_IN)</option>
+            <option value="ne">Nepali (ne_NP)</option>
+            <option value="si">Sinhala (si_LK)</option>
+            <option value="ur">Urdu (ur_PK)</option>
+        </select>
+        
+        <div class="button-group">
+            <button id="recordButton">Speak Sanskrit</button>
+            <button onclick="translateText()">Translate</button>
+            <button onclick="clearAll()">Clear</button>
+            <button onclick="window.location.href='/chatbot'">Chatbot</button>
+        </div>
+        
+        <textarea id="sanskritText" placeholder="Enter Sanskrit text here..."></textarea>
+        
+        <div id="loading" class="loading">Translating... Please wait.</div>
+        
+        <h2>Translated Text:</h2>
+        <div id="translatedText" class="translation-result"></div>
+        
+        <div class="audio-controls">
+            <button onclick="speakTranslatedText()">Listen to Translation</button>
+            <audio id="translationAudio" controls style="display: none;"></audio>
+        </div>
+    </div>
+    
+    <script>
+        // Speech recognition
+        const recordButton = document.getElementById('recordButton');
+let mediaRecorder;
+let audioChunks = [];
+let mediaStream;
+
+recordButton.addEventListener('click', async () => {
+    try {
+        if (recordButton.textContent === 'Speak Sanskrit') {
+            // Start recording
+            recordButton.disabled = true;
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('loading').textContent = 'Initializing microphone...';
+            
+            // Configure audio for optimal Sanskrit capture
+            mediaStream = await navigator.mediaDevices.getUserMedia({ 
+                audio: {
+                    channelCount: 1,         // Mono channel
+                    sampleRate: 16000,      // Optimal for speech
+                    sampleSize: 16,         // 16-bit samples
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true
+                },
+                video: false
+            });
+
+            mediaRecorder = new MediaRecorder(mediaStream, {
+                mimeType: 'audio/webm;codecs=opus',
+                audioBitsPerSecond: 128000  // Higher quality for Sanskrit
+            });
+
+            mediaRecorder.ondataavailable = (e) => {
+                audioChunks.push(e.data);
+            };
+
+            mediaRecorder.onstop = async () => {
+                try {
+                    document.getElementById('loading').textContent = 'Processing Sanskrit...';
+                    
+                    // Create audio blob
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/webm;codecs=opus' });
+                    
+                    // Convert to WAV format (better for speech recognition)
+                    const wavBlob = await convertToWav(audioBlob);
+                    
+                    // Send to server
+                    const formData = new FormData();
+                    formData.append('audio', wavBlob, 'sanskrit_recording.wav');
+                    
+                    const response = await fetch('/speech-to-text', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (result.text) {
+                        document.getElementById('sanskritText').value = result.text;
+                        document.getElementById('loading').style.display = 'none';
+                    } else {
+                        throw new Error(result.error || 'Unknown error');
+                    }
+                } catch (error) {
+                    console.error('Recognition error:', error);
+                    document.getElementById('loading').textContent = 'Error: ' + error.message;
+                    setTimeout(() => {
+                        document.getElementById('loading').style.display = 'none';
+                    }, 3000);
+                } finally {
+                    audioChunks = [];
+                    recordButton.disabled = false;
+                }
+            };
+
+            // Start recording with 100ms time slices for better responsiveness
+            mediaRecorder.start(100);
+            
+            // Update UI
+            recordButton.textContent = 'Stop Recording';
+            recordButton.classList.add('recording');
+            document.getElementById('loading').textContent = 'Listening for Sanskrit...';
+            recordButton.disabled = false;
+            
+            // Auto-stop after 15 seconds
+            setTimeout(() => {
+                if (mediaRecorder.state === 'recording') {
+                    mediaRecorder.stop();
+                    mediaStream.getTracks().forEach(track => track.stop());
+                    recordButton.textContent = 'Speak Sanskrit';
+                    recordButton.classList.remove('recording');
+                }
+            }, 15000);
+
+        } else {
+            // Stop recording
+            mediaRecorder.stop();
+            mediaStream.getTracks().forEach(track => track.stop());
+            recordButton.textContent = 'Speak Sanskrit';
+            recordButton.classList.remove('recording');
+        }
+    } catch (error) {
+        console.error('Recording setup error:', error);
+        document.getElementById('loading').textContent = 'Error: ' + error.message;
+        setTimeout(() => {
+            document.getElementById('loading').style.display = 'none';
+        }, 3000);
+        
+        if (mediaStream) {
+            mediaStream.getTracks().forEach(track => track.stop());
+        }
+        recordButton.textContent = 'Speak Sanskrit';
+        recordButton.classList.remove('recording');
+        recordButton.disabled = false;
+    }
+});
+
+// Helper function to convert to WAV format
+async function convertToWav(audioBlob) {
+    return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = async () => {
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const arrayBuffer = reader.result;
+            
+            // Decode audio data
+            const audioData = await audioContext.decodeAudioData(arrayBuffer);
+            
+            // Create WAV buffer
+            const wavBuffer = encodeWAV(audioData);
+            const wavBlob = new Blob([wavBuffer], { type: 'audio/wav' });
+            resolve(wavBlob);
+        };
+        reader.readAsArrayBuffer(audioBlob);
+    });
+}
+
+// WAV encoder function
+function encodeWAV(audioBuffer) {
+    const numChannels = 1;  // Force mono for Sanskrit
+    const sampleRate = 16000;
+    const format = 1;       // PCM
+    const bitDepth = 16;
+    
+    const bytesPerSample = bitDepth / 8;
+    const blockAlign = numChannels * bytesPerSample;
+    const byteRate = sampleRate * blockAlign;
+    const dataSize = audioBuffer.length * numChannels * bytesPerSample;
+    
+    const buffer = new ArrayBuffer(44 + dataSize);
+    const view = new DataView(buffer);
+    
+    // Write WAV header
+    writeString(view, 0, 'RIFF');
+    view.setUint32(4, 36 + dataSize, true);
+    writeString(view, 8, 'WAVE');
+    writeString(view, 12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, format, true);
+    view.setUint16(22, numChannels, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, byteRate, true);
+    view.setUint16(32, blockAlign, true);
+    view.setUint16(34, bitDepth, true);
+    writeString(view, 36, 'data');
+    view.setUint32(40, dataSize, true);
+    
+    // Write PCM audio data
+    const offset = 44;
+    const channelData = audioBuffer.getChannelData(0);
+    for (let i = 0; i < channelData.length; i++) {
+        const sample = Math.max(-1, Math.min(1, channelData[i]));
+        view.setInt16(offset + i * 2, sample * 0x7FFF, true);
+    }
+    
+    return buffer;
+}
+
+function writeString(view, offset, string) {
+    for (let i = 0; i < string.length; i++) {
+        view.setUint8(offset + i, string.charCodeAt(i));
+    }
+}
+        
+        // Rest of your existing functions (translateText, speakTranslatedText, clearAll)
+        async function translateText() {
+            const text = document.getElementById('sanskritText').value;
+            const selectedLanguage = document.getElementById('languageSelect').value;
+            
+            if (!text.trim()) {
+                alert('Please enter some Sanskrit text to translate');
+                return;
+            }
+            
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('translatedText').innerText = '';
+            
+            try {
+                const response = await fetch('/translate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ 
+                        text, 
+                        target_language: selectedLanguage 
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.error) {
+                    document.getElementById('translatedText').innerText = 'Error: ' + result.error;
+                } else {
+                    document.getElementById('translatedText').innerText = result.translated_text;
+                }
+            } catch (error) {
+                document.getElementById('translatedText').innerText = 'Error: ' + error.message;
+            } finally {
+                document.getElementById('loading').style.display = 'none';
+            }
+        }
+        
+        async function speakTranslatedText() {
+            const text = document.getElementById('translatedText').innerText;
+            const selectedLanguage = document.getElementById('languageSelect').value;
+            
+            if (!text.trim()) {
+                alert('No translated text to speak');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/text-to-speech', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ 
+                        text: text,
+                        lang: selectedLanguage
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.audio_url) {
+                    const audioPlayer = document.getElementById('translationAudio');
+                    audioPlayer.src = result.audio_url;
+                    audioPlayer.style.display = 'block';
+                    audioPlayer.play();
+                } else if (result.error) {
+                    alert('Error: ' + result.error);
+                }
+            } catch (error) {
+                alert('Error generating speech: ' + error.message);
+            }
+        }
+        
+        function clearAll() {
+            document.getElementById('sanskritText').value = '';
+            document.getElementById('translatedText').innerText = '';
+            const audioPlayer = document.getElementById('translationAudio');
+            audioPlayer.src = '';
+            audioPlayer.style.display = 'none';
+        }
+    </script>
+</body>
+</html>
